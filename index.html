@@ -1,0 +1,593 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spotify Album Poster Generator</title>
+<style>
+  /* ---------- POSTER ----------
+     Every value below is a var() whose fallback is the original hard-coded
+     value, so the poster renders identically before/without JS. The control
+     panel just overrides these vars on :root. ---------- */
+  .stage{display:flex;justify-content:center;margin-top:24px}
+  #posterScaler{transform-origin:top center}
+  #poster{
+    width:var(--poster-w,8.5in);height:var(--poster-h,11in);
+    background:var(--poster-bg,#fff);color:var(--poster-fg,#0a0a0a);position:relative;
+    padding:var(--pad-top,.55in) var(--pad-x,.55in) var(--pad-bottom,.45in);
+    font-family:var(--poster-font,Georgia,"Times New Roman",serif);
+    box-shadow:0 var(--shadow-y,18px) var(--shadow-blur,60px) var(--shadow-rgba,rgba(0,0,0,.55));
+    overflow:var(--poster-overflow,hidden);
+    display:var(--poster-display,flex);flex-direction:var(--poster-dir,column);
+  }
+  .p-accent{position:absolute;left:var(--accent-inset,.55in);right:var(--accent-inset,.55in);
+    top:var(--accent-top,.32in);height:var(--accent-h,3px);background:var(--accent-bg,#111)}
+  .p-head{display:flex;justify-content:var(--head-justify,space-between);align-items:var(--head-align,flex-start);
+    gap:var(--head-gap,14px);margin-top:var(--head-mt,6px)}
+  #p-title{font-weight:var(--title-weight,800);letter-spacing:var(--title-ls,.5px);line-height:var(--title-lh,1.0);
+    text-transform:var(--title-transform,uppercase);font-size:var(--title-fs,34px);max-width:var(--title-maxw,78%)}
+  #p-artistyear{font-size:var(--ay-fs,13px);font-weight:var(--ay-weight,600);text-align:var(--ay-align,right);
+    white-space:var(--ay-wrap,nowrap);padding-top:var(--ay-pt,5px);letter-spacing:var(--ay-ls,.3px)}
+  .p-cover-wrap{margin:var(--cover-mt,16px) 0 var(--cover-mb,4px);display:flex;justify-content:var(--cover-justify,center)}
+  #p-cover{width:var(--cover-w,90%);aspect-ratio:var(--cover-ar,1/1);object-fit:var(--cover-fit,cover);
+    background:var(--cover-bg,#eee);display:block}
+  .p-body{flex:1;display:flex;gap:var(--body-gap,18px);margin-top:var(--body-mt,14px);min-height:0;
+    width:var(--body-w,90%);align-self:center}
+  .p-tracks-wrap{flex:1;min-width:0}
+  #p-tracks{column-gap:var(--tracks-colgap,18px);font-size:var(--tracks-fs,14px);line-height:var(--tracks-lh,1.4)}
+  .trk{break-inside:avoid;display:flex;gap:var(--trk-gap,6px);white-space:var(--trk-wrap,nowrap);overflow:hidden;
+    margin-bottom:var(--trk-mb,5px)}
+  .trk .n{color:var(--num-color,#111);min-width:var(--num-minw,18px);text-align:var(--num-align,right);
+    font-variant-numeric:tabular-nums}
+  .trk .t{text-overflow:ellipsis;overflow:hidden}
+  .p-side{width:var(--side-w,2.0in);flex:none;display:flex;flex-direction:column;
+    align-items:var(--side-align,stretch);gap:var(--side-gap,8px)}
+  #p-code{width:var(--code-w,100%);height:var(--code-h,.42in);object-fit:var(--code-fit,contain);
+    object-position:var(--code-pos,right)}
+  #p-sign{flex:1;display:flex;align-items:center;justify-content:center;text-align:var(--sign-align,center);
+    font-family:var(--sign-font,"Snell Roundhand","Brush Script MT","Segoe Script","Bradley Hand",cursive);
+    font-size:var(--sign-fs,52px);line-height:var(--sign-lh,1)}
+  .p-meta{text-align:var(--meta-align,right);font-size:var(--meta-fs,8.5px);font-weight:var(--meta-weight,700);
+    letter-spacing:var(--meta-ls,.4px);line-height:var(--meta-lh,1.6)}
+  .p-foot{margin-top:var(--foot-mt,10px)}
+  #p-palette{display:flex;height:var(--palette-h,.28in);width:var(--palette-w,100%)}
+  #p-palette div{flex:1}
+  .p-accent,#p-palette,#p-palette div{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+
+  @media screen{
+    #posterScaler{transform:scale(var(--preview-scale,.72))}
+    .stage{margin-top:var(--stage-mt,-30px)}
+
+    /* ---------- app chrome: controls scroll, poster stays put ---------- */
+    html,body{height:100%}
+    body{margin:0}
+    .app{display:flex;align-items:stretch;height:100vh;overflow:hidden}
+    .app-ui{
+      width:400px;flex:none;height:100vh;overflow-y:auto;box-sizing:border-box;
+      padding:16px 18px 60px;border-right:1px solid #d8d8d8;background:#fafafa;
+      font:13px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;
+    }
+    .app-ui h1{font-size:17px;margin:0 0 12px}
+    .app-ui h2{font-size:12px;margin:20px 0 6px;text-transform:uppercase;letter-spacing:.8px;color:#666}
+    .panel{background:#fff;border:1px solid #e0e0e0;border-radius:6px;padding:10px 12px}
+    .panel .row{display:flex;gap:8px;align-items:flex-end;margin-bottom:8px}
+    .panel .row>div{flex:1;min-width:0}
+    .panel .row label{display:block;color:#555;margin-bottom:3px}
+    .panel input[type=text]{width:100%;box-sizing:border-box;padding:5px 7px;font:inherit}
+    .btnrow{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px}
+    .status{margin-top:8px;color:#555;min-height:1.2em}
+    .status.ok{color:#137333}
+    .status.err{color:#c5221f}
+    button{font:inherit;padding:5px 12px;cursor:pointer}
+    #controls details{border:1px solid #e2e2e2;background:#fff;border-radius:6px;margin-bottom:8px;padding:6px 10px 8px}
+    #controls summary{cursor:pointer;font-weight:600;padding:2px 0;list-style-position:outside}
+    #controls .ctl{margin:7px 0}
+    #controls .ctl label{display:block;color:#555;margin-bottom:2px}
+    #controls .ctl-bool label{display:inline;margin:0}
+    #controls .ctl-num{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+    #controls .ctl-num label{flex:1 0 100%}
+    #controls input[type=range]{flex:1;min-width:120px}
+    #controls input[type=number]{width:72px;font:inherit;padding:2px 4px}
+    #controls select{max-width:100%;font:inherit;padding:2px 4px}
+
+    .stage{
+      flex:1;min-width:0;height:100vh;overflow:auto;box-sizing:border-box;
+      padding:16px;align-items:flex-start;background:#2f2f2f;
+    }
+  }
+  @media (max-width:900px){
+    .app{flex-direction:column;height:auto;overflow:visible}
+    .app-ui{width:auto;height:auto;order:2;border-right:none;border-top:1px solid #d8d8d8}
+    .stage{order:1;height:65vh;position:sticky;top:0;z-index:2}
+  }
+  @media print{
+    @page{size:letter portrait;margin:0}
+    .app{display:block !important;height:auto !important;overflow:visible !important}
+    .app-ui{display:none !important}
+    .stage{margin:0 !important;height:auto !important;overflow:visible !important;padding:0 !important;background:#fff !important}
+    #posterScaler{transform:none !important;margin:0 !important}
+    #poster{box-shadow:none;margin:0}
+    body{background:#fff}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="app-ui">
+    <h1>Spotify Album Poster Generator</h1>
+    <div class="panel">
+      <div class="row">
+        <div>
+          <label>spotify album link</label>
+          <input id="albumUrl" type="text" placeholder="https://open.spotify.com/album/…  or  spotify:album:…">
+        </div>
+        <button id="genBtn">generate</button>
+        <button id="printBtn" class="ghost">print</button>
+      </div>
+      <label>
+        <input type="checkbox" id="spCoverChk"> use spotify cover
+      </label>
+      <div id="status" class="status"></div>
+    </div>
+
+    <h2>poster style</h2>
+    <p class="btnrow">
+      <button id="resetBtn">reset all to defaults</button>
+      <button id="expandBtn">expand / collapse all</button>
+      <button id="exportBtn">export settings</button>
+      <button id="importBtn">import settings</button>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
+    </p>
+    <div id="styleStatus" class="status"></div>
+    <div id="controls"></div>
+  </div>
+
+  <div class="stage">
+    <div id="posterScaler">
+      <div id="poster">
+        <div class="p-accent" id="p-accent"></div>
+        <div class="p-head">
+          <div id="p-title">ALBUM TITLE</div>
+          <div id="p-artistyear">Artist 2024</div>
+        </div>
+        <div class="p-cover-wrap"><img id="p-cover" alt="cover"></div>
+        <div class="p-body">
+          <div class="p-tracks-wrap"><div id="p-tracks"></div></div>
+          <div class="p-side">
+            <img id="p-code" alt="spotify code">
+            <div id="p-sign">Artist</div>
+            <div class="p-meta">
+              <div id="p-released">RELEASED: —</div>
+              <div id="p-length">LENGTH: —</div>
+            </div>
+          </div>
+        </div>
+        <div class="p-foot">
+          <div id="p-palette"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const MONTHS=["JANUARY","FEBRUARY","MARCH","APRIL","MAY","JUNE","JULY","AUGUST","SEPTEMBER","OCTOBER","NOVEMBER","DECEMBER"];
+let spotifyId="";
+
+function setStatus(msg,cls=""){ const s=$("status"); s.textContent=msg; s.className="status "+cls; }
+const cleanName = n => (n||"").replace(/\s*[-–]\s*(Single|EP)\s*$/i,"").trim();
+let lastData=null;
+
+/* ================= STYLE CONTROLS =================
+   Every declaration from the poster CSS, with its original value as `def`.
+   type: num (slider + number box) | color | pick (select) | bool          */
+const BODY_FONTS=[
+  ['Georgia, Times New Roman, serif (default)','Georgia,"Times New Roman",serif'],
+  ['Times New Roman','"Times New Roman",Times,serif'],
+  ['Baskerville','Baskerville,"Palatino Linotype",Palatino,serif'],
+  ['Palatino','"Palatino Linotype",Palatino,Georgia,serif'],
+  ['Didot','Didot,"Bodoni MT","Playfair Display",Georgia,serif'],
+  ['Helvetica / Arial','Helvetica,Arial,sans-serif'],
+  ['Futura','Futura,"Century Gothic","Avenir Next",sans-serif'],
+  ['Avenir','"Avenir Next",Avenir,Helvetica,sans-serif'],
+  ['Optima','Optima,Candara,"Segoe UI",sans-serif'],
+  ['Courier (mono)','"Courier New",Courier,monospace'],
+  ['System UI','system-ui,-apple-system,"Segoe UI",sans-serif'],
+];
+const SCRIPT_FONTS=[
+  ['Snell Roundhand (default)','"Snell Roundhand","Brush Script MT","Segoe Script","Bradley Hand",cursive'],
+  ['Brush Script','"Brush Script MT","Segoe Script",cursive'],
+  ['Bradley Hand','"Bradley Hand","Segoe Script",cursive'],
+  ['Zapfino','Zapfino,"Snell Roundhand",cursive'],
+  ['Marker Felt','"Marker Felt","Comic Sans MS",cursive'],
+  ['Same as poster font','inherit'],
+];
+const WEIGHTS=['100','200','300','400','500','600','700','800','900'];
+
+const SPEC=[
+ ['Page / sheet',[
+  {k:'poster-w',      v:'--poster-w',       t:'num',  d:8.5,  min:3,   max:14,  step:.05, u:'in', l:'width'},
+  {k:'poster-h',      v:'--poster-h',       t:'num',  d:11,   min:3,   max:20,  step:.05, u:'in', l:'height'},
+  {k:'poster-bg',     v:'--poster-bg',      t:'color',d:'#ffffff',                        l:'background'},
+  {k:'poster-fg',     v:'--poster-fg',      t:'color',d:'#0a0a0a',                        l:'text color'},
+  {k:'pad-top',       v:'--pad-top',        t:'num',  d:.55,  min:0,   max:2,   step:.01, u:'in', l:'padding top'},
+  {k:'pad-x',         v:'--pad-x',          t:'num',  d:.55,  min:0,   max:2,   step:.01, u:'in', l:'padding left/right'},
+  {k:'pad-bottom',    v:'--pad-bottom',     t:'num',  d:.45,  min:0,   max:2,   step:.01, u:'in', l:'padding bottom'},
+  {k:'poster-font',   v:'--poster-font',    t:'pick', d:BODY_FONTS[0][1], opts:BODY_FONTS, l:'font family'},
+  {k:'shadow-y',      v:'--shadow-y',       t:'num',  d:18,   min:0,   max:120, step:1,   u:'px', l:'shadow drop'},
+  {k:'shadow-blur',   v:'--shadow-blur',    t:'num',  d:60,   min:0,   max:200, step:1,   u:'px', l:'shadow blur'},
+  {k:'shadow-color',  v:null,               t:'color',d:'#000000',                        l:'shadow color'},
+  {k:'shadow-alpha',  v:null,               t:'num',  d:.55,  min:0,   max:1,   step:.01, u:'',   l:'shadow opacity'},
+ ]],
+ ['Accent bar',[
+  {k:'accent-auto',   v:null,               t:'bool', d:true,                             l:'color from cover art'},
+  {k:'accent-color',  v:null,               t:'color',d:'#111111',                        l:'manual color'},
+  {k:'accent-inset',  v:'--accent-inset',   t:'num',  d:.55,  min:0,   max:2,   step:.01, u:'in', l:'inset left/right'},
+  {k:'accent-top',    v:'--accent-top',     t:'num',  d:.32,  min:0,   max:3,   step:.01, u:'in', l:'distance from top'},
+  {k:'accent-h',      v:'--accent-h',       t:'num',  d:3,    min:0,   max:40,  step:.5,  u:'px', l:'thickness'},
+ ]],
+ ['Header row',[
+  {k:'head-gap',      v:'--head-gap',       t:'num',  d:14,   min:0,   max:80,  step:1,   u:'px', l:'gap'},
+  {k:'head-mt',       v:'--head-mt',        t:'num',  d:6,    min:-40, max:80,  step:1,   u:'px', l:'margin top'},
+  {k:'head-justify',  v:'--head-justify',   t:'pick', d:'space-between', opts:['space-between','flex-start','center','flex-end','space-around'], l:'horizontal spread'},
+  {k:'head-align',    v:'--head-align',     t:'pick', d:'flex-start',    opts:['flex-start','center','flex-end','baseline','stretch'],           l:'vertical align'},
+ ]],
+ ['Album title',[
+  {k:'title-fs',      v:'--title-fs',       t:'num',  d:34,   min:8,   max:100, step:1,   u:'px', l:'font size (shrinks to fit)'},
+  {k:'title-weight',  v:'--title-weight',   t:'pick', d:'800', opts:WEIGHTS,                      l:'font weight'},
+  {k:'title-ls',      v:'--title-ls',       t:'num',  d:.5,   min:-3,  max:12,  step:.1,  u:'px', l:'letter spacing'},
+  {k:'title-lh',      v:'--title-lh',       t:'num',  d:1.0,  min:.7,  max:2.5, step:.05, u:'',   l:'line height'},
+  {k:'title-transform',v:'--title-transform',t:'pick',d:'uppercase', opts:['uppercase','none','lowercase','capitalize'],                         l:'text transform'},
+  {k:'title-maxw',    v:'--title-maxw',     t:'num',  d:78,   min:20,  max:100, step:1,   u:'%',  l:'max width'},
+ ]],
+ ['Artist + year',[
+  {k:'ay-fs',         v:'--ay-fs',          t:'num',  d:13,   min:5,   max:48,  step:.5,  u:'px', l:'font size'},
+  {k:'ay-weight',     v:'--ay-weight',      t:'pick', d:'600', opts:WEIGHTS,                      l:'font weight'},
+  {k:'ay-ls',         v:'--ay-ls',          t:'num',  d:.3,   min:-2,  max:10,  step:.1,  u:'px', l:'letter spacing'},
+  {k:'ay-pt',         v:'--ay-pt',          t:'num',  d:5,    min:0,   max:60,  step:1,   u:'px', l:'padding top'},
+  {k:'ay-align',      v:'--ay-align',       t:'pick', d:'right', opts:['right','left','center'],  l:'text align'},
+  {k:'ay-wrap',       v:'--ay-wrap',        t:'pick', d:'nowrap',opts:['nowrap','normal'],        l:'wrapping'},
+ ]],
+ ['Cover image',[
+  {k:'cover-mt',      v:'--cover-mt',       t:'num',  d:16,   min:0,   max:120, step:1,   u:'px', l:'margin top'},
+  {k:'cover-mb',      v:'--cover-mb',       t:'num',  d:4,    min:0,   max:120, step:1,   u:'px', l:'margin bottom'},
+  {k:'cover-w',       v:'--cover-w',        t:'num',  d:90,   min:20,  max:100, step:1,   u:'%',  l:'width'},
+  {k:'cover-ar',      v:'--cover-ar',       t:'num',  d:1,    min:.4,  max:2.5, step:.01, u:'',   l:'aspect ratio (w/h)'},
+  {k:'cover-fit',     v:'--cover-fit',      t:'pick', d:'cover', opts:['cover','contain','fill','none','scale-down'], l:'object fit'},
+  {k:'cover-justify', v:'--cover-justify',  t:'pick', d:'center',opts:['center','flex-start','flex-end'],             l:'alignment'},
+  {k:'cover-bg',      v:'--cover-bg',       t:'color',d:'#eeeeee',                        l:'placeholder background'},
+ ]],
+ ['Body block (tracks + side)',[
+  {k:'body-gap',      v:'--body-gap',       t:'num',  d:18,   min:0,   max:100, step:1,   u:'px', l:'gap'},
+  {k:'body-mt',       v:'--body-mt',        t:'num',  d:14,   min:0,   max:100, step:1,   u:'px', l:'margin top'},
+  {k:'body-w',        v:'--body-w',         t:'num',  d:90,   min:40,  max:100, step:1,   u:'%',  l:'width'},
+ ]],
+ ['Track list',[
+  {k:'tracks-cols',   v:null,               t:'pick', d:'auto', opts:['auto','1','2','3','4','5'], l:'columns'},
+  {k:'tracks-colgap', v:'--tracks-colgap',  t:'num',  d:18,   min:0,   max:100, step:1,   u:'px', l:'column gap'},
+  {k:'tracks-fs',     v:'--tracks-fs',      t:'num',  d:14,   min:4,   max:40,  step:.5,  u:'px', l:'font size (shrinks to fit)'},
+  {k:'tracks-lh',     v:'--tracks-lh',      t:'num',  d:1.4,  min:.8,  max:3,   step:.05, u:'',   l:'line height'},
+  {k:'trk-gap',       v:'--trk-gap',        t:'num',  d:6,    min:0,   max:50,  step:.5,  u:'px', l:'gap: number → title'},
+  {k:'trk-mb',        v:'--trk-mb',         t:'num',  d:5,    min:0,   max:40,  step:.5,  u:'px', l:'space between rows'},
+  {k:'trk-wrap',      v:'--trk-wrap',       t:'pick', d:'nowrap', opts:['nowrap','normal'],       l:'wrapping'},
+  {k:'num-color',     v:'--num-color',      t:'color',d:'#111111',                        l:'number color'},
+  {k:'num-minw',      v:'--num-minw',       t:'num',  d:18,   min:0,   max:80,  step:1,   u:'px', l:'number column width'},
+  {k:'num-align',     v:'--num-align',      t:'pick', d:'right', opts:['right','left','center'],  l:'number align'},
+ ]],
+ ['Side column',[
+  {k:'side-w',        v:'--side-w',         t:'num',  d:2.0,  min:.5,  max:5,   step:.05, u:'in', l:'width'},
+  {k:'side-gap',      v:'--side-gap',       t:'num',  d:8,    min:0,   max:80,  step:1,   u:'px', l:'gap between items'},
+  {k:'side-align',    v:'--side-align',     t:'pick', d:'stretch', opts:['stretch','center','flex-start','flex-end'], l:'alignment'},
+ ]],
+ ['Spotify code',[
+  {k:'code-w',        v:'--code-w',         t:'num',  d:100,  min:20,  max:100, step:1,   u:'%',  l:'width'},
+  {k:'code-h',        v:'--code-h',         t:'num',  d:.42,  min:.1,  max:2,   step:.01, u:'in', l:'height'},
+  {k:'code-fit',      v:'--code-fit',       t:'pick', d:'contain', opts:['contain','cover','fill','none'],            l:'object fit'},
+  {k:'code-pos',      v:'--code-pos',       t:'pick', d:'right',   opts:['right','center','left'],                    l:'object position'},
+ ]],
+ ['Signature',[
+  {k:'sign-font',     v:'--sign-font',      t:'pick', d:SCRIPT_FONTS[0][1], opts:SCRIPT_FONTS,   l:'font family'},
+  {k:'sign-fs',       v:'--sign-fs',        t:'num',  d:52,   min:8,   max:160, step:1,   u:'px', l:'font size'},
+  {k:'sign-lh',       v:'--sign-lh',        t:'num',  d:1,    min:.6,  max:2.5, step:.05, u:'',   l:'line height'},
+  {k:'sign-align',    v:'--sign-align',     t:'pick', d:'center', opts:['center','left','right'], l:'text align'},
+ ]],
+ ['Released / length meta',[
+  {k:'meta-fs',       v:'--meta-fs',        t:'num',  d:8.5,  min:4,   max:30,  step:.5,  u:'px', l:'font size'},
+  {k:'meta-weight',   v:'--meta-weight',    t:'pick', d:'700', opts:WEIGHTS,                      l:'font weight'},
+  {k:'meta-ls',       v:'--meta-ls',        t:'num',  d:.4,   min:-1,  max:8,   step:.1,  u:'px', l:'letter spacing'},
+  {k:'meta-lh',       v:'--meta-lh',        t:'num',  d:1.6,  min:.8,  max:3,   step:.05, u:'',   l:'line height'},
+  {k:'meta-align',    v:'--meta-align',     t:'pick', d:'right', opts:['right','left','center'],  l:'text align'},
+ ]],
+ ['Palette strip',[
+  {k:'foot-mt',       v:'--foot-mt',        t:'num',  d:10,   min:0,   max:100, step:1,   u:'px', l:'margin above strip'},
+  {k:'palette-h',     v:'--palette-h',      t:'num',  d:.28,  min:0,   max:2,   step:.01, u:'in', l:'height'},
+  {k:'palette-w',     v:'--palette-w',      t:'num',  d:100,  min:10,  max:100, step:1,   u:'%',  l:'width'},
+ ]],
+ ['Preview + structure',[
+  {k:'preview-fit',   v:null,               t:'bool', d:true,                             l:'fit poster to window (overrides zoom)'},
+  {k:'preview-scale', v:'--preview-scale',  t:'num',  d:.72,  min:.15, max:1.5, step:.01, u:'',   l:'preview zoom (screen only)'},
+  {k:'stage-mt',      v:'--stage-mt',       t:'num',  d:0,    min:-300,max:200, step:1,   u:'px', l:'preview top margin (screen only)'},
+  {k:'poster-overflow',v:'--poster-overflow',t:'pick',d:'hidden', opts:['hidden','visible'],      l:'overflow'},
+  {k:'poster-display',v:'--poster-display', t:'pick', d:'flex',   opts:['flex','block'],          l:'display'},
+  {k:'poster-dir',    v:'--poster-dir',     t:'pick', d:'column', opts:['column','column-reverse'],l:'flex direction'},
+ ]],
+];
+const ALL = SPEC.flatMap(g=>g[1]);
+const DEFAULTS = Object.fromEntries(ALL.map(c=>[c.k,c.d]));
+const S = {...DEFAULTS};
+let autoAccent="#111", autoCols=1;
+
+const hexA=(hex,a)=>{const n=parseInt(hex.slice(1),16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;};
+
+function applyStyles(){
+  const r=document.documentElement.style;
+  for(const c of ALL){ if(c.v) r.setProperty(c.v, c.t==='num' ? S[c.k]+(c.u||'') : S[c.k]); }
+  r.setProperty('--shadow-rgba', hexA(S['shadow-color'], S['shadow-alpha']));
+  applyAccent(); applyCols();
+  requestAnimationFrame(()=>{ fitPoster(); fitPreview(); });
+  save();
+}
+
+/* Scale the preview so the whole sheet stays inside the stage pane, and take
+   the scaled-away space back out of the layout box (transform doesn't). */
+function fitPreview(){
+  const stage=document.querySelector(".stage"), scaler=$("posterScaler"), poster=$("poster");
+  const w=poster.offsetWidth, h=poster.offsetHeight;
+  if(!w||!h) return;
+  let s=S['preview-scale'];
+  if(S['preview-fit']){
+    const cs=getComputedStyle(stage);
+    const availW=stage.clientWidth  - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const availH=stage.clientHeight - parseFloat(cs.paddingTop)  - parseFloat(cs.paddingBottom) - S['stage-mt'];
+    s=Math.max(.05, Math.min(availW/w, availH/h));
+  }
+  document.documentElement.style.setProperty('--preview-scale', s);
+  scaler.style.marginBottom = -(h*(1-s))+"px";
+  scaler.style.marginLeft = scaler.style.marginRight = -(w*(1-s)/2)+"px";
+}
+addEventListener("resize", ()=>requestAnimationFrame(fitPreview));
+function applyAccent(){
+  document.documentElement.style.setProperty('--accent-bg', S['accent-auto'] ? autoAccent : S['accent-color']);
+}
+function applyCols(){
+  $("p-tracks").style.columnCount = S['tracks-cols']==='auto' ? autoCols : S['tracks-cols'];
+}
+
+/* ---- persistence ---- */
+const KEY="posterStyle";
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
+function load(){
+  try{ const j=JSON.parse(localStorage.getItem(KEY)||"{}");
+    for(const k in j) if(k in S) S[k]=j[k];
+  }catch(e){}
+}
+
+/* ---- import / export a settings file ---- */
+const TYPES=Object.fromEntries(ALL.map(c=>[c.k,c]));
+function setStyleStatus(msg,cls=""){ const s=$("styleStatus"); s.textContent=msg; s.className="status "+cls; }
+
+function exportSettings(){
+  const blob=new Blob([JSON.stringify({app:"spotify-poster",version:1,settings:S},null,2)],
+                      {type:"application/json"});
+  const url=URL.createObjectURL(blob), a=document.createElement("a");
+  const stamp=new Date().toISOString().slice(0,10);
+  const name=lastData ? cleanName(lastData.title).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"") : "";
+  a.href=url; a.download=`poster-settings${name?"-"+name:""}-${stamp}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  setStyleStatus("Exported "+a.download,"ok");
+}
+
+/* Accepts either the wrapper written by exportSettings or a bare settings object. */
+function applySettings(obj){
+  const src = (obj && typeof obj==="object" && obj.settings && typeof obj.settings==="object") ? obj.settings : obj;
+  if(!src || typeof src!=="object") throw new Error("Not a settings file.");
+  let applied=0, skipped=0;
+  for(const k in src){
+    const c=TYPES[k];
+    if(!c){ skipped++; continue; }
+    let v=src[k];
+    if(c.t==='num'){
+      v=parseFloat(v);
+      if(!isFinite(v)){ skipped++; continue; }
+      v=Math.min(c.max, Math.max(c.min, v));
+    } else if(c.t==='bool'){
+      v=!!v;
+    } else {
+      v=String(v);
+      if(c.t==='pick' && !c.opts.some(o=>(Array.isArray(o)?o[1]:o)===v)){ skipped++; continue; }
+      if(c.t==='color' && !/^#[0-9a-f]{6}$/i.test(v)){ skipped++; continue; }
+    }
+    S[k]=v; applied++;
+  }
+  if(!applied) throw new Error("No recognisable settings in that file.");
+  syncControls();
+  applyStyles();
+  return {applied,skipped};
+}
+function syncControls(){ for(const c of ALL) c._reset && c._reset(); }
+
+function importSettings(file){
+  if(!file) return;
+  const fr=new FileReader();
+  fr.onload=()=>{
+    try{
+      const {applied,skipped}=applySettings(JSON.parse(fr.result));
+      setStyleStatus(`Loaded ${applied} settings from ${file.name}${skipped?` (${skipped} ignored)`:""}.`,"ok");
+    }catch(e){ setStyleStatus("Import failed: "+e.message,"err"); }
+  };
+  fr.onerror=()=>setStyleStatus("Could not read that file.","err");
+  fr.readAsText(file);
+}
+
+/* ---- build the panel ---- */
+function buildControls(){
+  const host=$("controls");
+  for(const [group,items] of SPEC){
+    const det=document.createElement("details"); det.open=true;
+    const sum=document.createElement("summary"); sum.textContent=group; det.appendChild(sum);
+    for(const c of items) det.appendChild(makeControl(c));
+    host.appendChild(det);
+  }
+}
+function makeControl(c){
+  const wrap=document.createElement("div"); wrap.className="ctl ctl-"+c.t;
+  const lab=document.createElement("label"); lab.textContent=c.l+" ";
+  wrap.appendChild(lab);
+  const set=val=>{ S[c.k]=val; applyStyles(); };
+
+  if(c.t==='num'){
+    const rng=document.createElement("input"); rng.type="range";
+    const num=document.createElement("input"); num.type="number";
+    for(const el of [rng,num]){ el.min=c.min; el.max=c.max; el.step=c.step; el.value=S[c.k]; }
+    num.size=6;
+    rng.oninput=()=>{ num.value=rng.value; set(parseFloat(rng.value)); };
+    num.oninput=()=>{ rng.value=num.value; set(parseFloat(num.value)); };
+    wrap.append(rng," ",num," ",c.u||"");
+    c._reset=()=>{ rng.value=num.value=S[c.k]; };
+  } else if(c.t==='color'){
+    const inp=document.createElement("input"); inp.type="color"; inp.value=S[c.k];
+    inp.oninput=()=>set(inp.value);
+    wrap.appendChild(inp);
+    c._reset=()=>{ inp.value=S[c.k]; };
+  } else if(c.t==='pick'){
+    const sel=document.createElement("select");
+    for(const o of c.opts){
+      const [text,val] = Array.isArray(o) ? o : [o,o];
+      const op=document.createElement("option"); op.textContent=text; op.value=val; sel.appendChild(op);
+    }
+    sel.value=S[c.k];
+    sel.onchange=()=>set(sel.value);
+    wrap.appendChild(sel);
+    c._reset=()=>{ sel.value=S[c.k]; };
+  } else { // bool
+    const inp=document.createElement("input"); inp.type="checkbox"; inp.checked=!!S[c.k];
+    inp.onchange=()=>set(inp.checked);
+    wrap.insertBefore(inp, lab);
+    c._reset=()=>{ inp.checked=!!S[c.k]; };
+  }
+  return wrap;
+}
+function resetAll(){
+  Object.assign(S, DEFAULTS);
+  syncControls();
+  applyStyles();
+  setStyleStatus("Reset to defaults.");
+}
+
+/* ---------- palette ---------- */
+function loadImg(url,cross){return new Promise((res,rej)=>{const im=new Image();if(cross)im.crossOrigin="anonymous";im.onload=()=>res(im);im.onerror=rej;im.src=url;});}
+const lum=c=>0.299*c.r+0.587*c.g+0.114*c.b;
+const dist=(a,b)=>Math.sqrt((a.r-b.r)**2+(a.g-b.g)**2+(a.b-b.b)**2);
+function extractPalette(img,count=8){
+  const s=90,c=document.createElement("canvas");c.width=s;c.height=s;
+  const ctx=c.getContext("2d");ctx.drawImage(img,0,0,s,s);
+  const d=ctx.getImageData(0,0,s,s).data,map=new Map();
+  for(let i=0;i<d.length;i+=4){
+    if(d[i+3]<125)continue;
+    const key=((d[i]&0xF0)<<16)|((d[i+1]&0xF0)<<8)|(d[i+2]&0xF0);
+    const e=map.get(key)||{count:0,r:0,g:0,b:0};
+    e.count++;e.r+=d[i];e.g+=d[i+1];e.b+=d[i+2];map.set(key,e);
+  }
+  let arr=[...map.values()].map(e=>({count:e.count,r:Math.round(e.r/e.count),g:Math.round(e.g/e.count),b:Math.round(e.b/e.count)}));
+  arr.sort((a,b)=>b.count-a.count);
+  const chosen=[];
+  for(let thr=60; thr>=0 && chosen.length<count; thr-=10)
+    for(const col of arr){ if(chosen.length>=count)break; if(!chosen.includes(col)&&chosen.every(x=>dist(x,col)>thr)) chosen.push(col); }
+  chosen.sort((a,b)=>lum(a)-lum(b));
+  return chosen;
+}
+
+/* ---------- render ---------- */
+function fmtDate(rd){ const p=(rd||"").slice(0,10).split("-"); if(p.length>=3) return `${MONTHS[+p[1]-1]} ${+p[2]},${p[0]}`; if(p.length===2) return `${MONTHS[+p[1]-1]} ${p[0]}`; return p[0]||"—"; }
+function fmtLen(ms){ const s=Math.round(ms/1000),m=Math.floor(s/60); return `${m}:${String(s%60).padStart(2,"0")}`; }
+
+async function render(d){
+  const artist=d.artist||"";
+  const year=(d.releaseDate||"").slice(0,4);
+  $("p-title").textContent = cleanName(d.title);
+  $("p-artistyear").textContent = `${artist} ${year}`.trim();
+  $("p-sign").textContent = artist;
+  $("p-released").textContent = "RELEASED: "+fmtDate(d.releaseDate);
+  const totalMs = d.tracks.reduce((s,t)=>s+(t.ms||0),0);
+  $("p-length").textContent = "LENGTH: "+fmtLen(totalMs);
+  $("p-code").src = `https://scannables.scdn.co/uri/plain/png/ffffff/black/640/spotify:album:${spotifyId}`;
+
+  const n=d.tracks.length;
+  autoCols = n>32?4:n>16?3:n>7?2:1;
+  const box=$("p-tracks"); applyCols();
+  box.innerHTML=d.tracks.map((t,idx)=>{
+    const name=(t.name||"").replace(/&/g,"&amp;").replace(/</g,"&lt;");
+    return `<div class="trk"><span class="n">${t.n||idx+1}.</span><span class="t">${name}</span></div>`;
+  }).join("");
+
+  const cover = $("spCoverChk").checked ? (d.coverSpotify || d.cover) : (d.cover || d.coverSpotify);
+  try{
+    const im=await loadImg(cover,true);
+    $("p-cover").src=cover;
+    const pal=extractPalette(im,8);
+    $("p-palette").innerHTML=pal.map(c=>`<div style="background:rgb(${c.r},${c.g},${c.b})"></div>`).join("");
+    const acc=pal.slice().sort((a,b)=>{const sp=x=>Math.max(x.r,x.g,x.b)-Math.min(x.r,x.g,x.b);return sp(b)-sp(a);})[0];
+    autoAccent = acc?`rgb(${acc.r},${acc.g},${acc.b})`:"#111";
+    applyAccent();
+  }catch(e){
+    $("p-cover").src=cover;
+    $("p-palette").innerHTML=["#111","#333","#555","#777","#999","#bbb","#ddd","#eee"].map(c=>`<div style="background:${c}"></div>`).join("");
+    autoAccent="#111"; applyAccent();
+  }
+  requestAnimationFrame(fitPoster);
+  setStatus(`Done: ${cleanName(d.title)} — ${n} tracks. Use Print / Save PDF.`,"ok");
+}
+
+/* Shrink-to-fit, starting from whatever the sliders say. */
+function fitPoster(){
+  const t=$("p-title"); let fs=S['title-fs']; t.style.fontSize=fs+"px";
+  const fsMin=Math.max(6,fs*0.53);
+  while(t.scrollHeight>t.offsetHeight+2 && fs>fsMin){ fs-=1; t.style.fontSize=fs+"px"; }
+  const box=$("p-tracks"); let ts=S['tracks-fs']; box.style.fontSize=ts+"px";
+  const tsMin=Math.max(3,ts*0.5);
+  const avail=$("poster").querySelector(".p-body").clientHeight;
+  while(box.scrollHeight>avail && ts>tsMin){ ts-=0.5; box.style.fontSize=ts+"px"; }
+}
+
+/* ---------- flow ---------- */
+async function generate(){
+  const raw=$("albumUrl").value.trim();
+  if(!raw){ setStatus("Paste a Spotify album link first.","err"); return; }
+  $("genBtn").disabled=true;
+  setStatus("Looking up album…");
+  try{
+    const r=await fetch("/api/album?url="+encodeURIComponent(raw));
+    const d=await r.json();
+    if(d.error) throw new Error(d.error);
+    if(!d.tracks || !d.tracks.length) throw new Error("No tracks found for that album.");
+    spotifyId=d.id; lastData=d;
+    await render(d);
+  }catch(e){
+    setStatus(e.message.includes("Failed to fetch")
+      ? "Can't reach the local server — run: python3 server.py"
+      : e.message, "err");
+  }finally{ $("genBtn").disabled=false; }
+}
+
+$("genBtn").onclick=generate;
+$("printBtn").onclick=()=>window.print();
+$("resetBtn").onclick=resetAll;
+$("exportBtn").onclick=exportSettings;
+$("importBtn").onclick=()=>$("importFile").click();
+$("importFile").onchange=e=>{ importSettings(e.target.files[0]); e.target.value=""; };
+$("expandBtn").onclick=()=>{
+  const ds=[...document.querySelectorAll("#controls details")];
+  const open=ds.some(d=>!d.open);
+  ds.forEach(d=>d.open=open);
+};
+$("spCoverChk").onchange=()=>{ if(lastData) render(lastData); };
+$("albumUrl").addEventListener("keydown",e=>{ if(e.key==="Enter") generate(); });
+
+load();
+buildControls();
+applyStyles();
+</script>
+</body>
+</html>
